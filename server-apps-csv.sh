@@ -21,5 +21,6 @@ cat $temp_json | jq -r '.servers[] | select(.id == "'$server_id'") | .apps[] | [
 done
 done
 echo "---------------------------------";
+$temp_json >> abd.csv
 rm $temp_json;
 echo "";
