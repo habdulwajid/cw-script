@@ -19,7 +19,6 @@ echo "Server: ID: $server_id IP: $server_ip Name: $server_label Provider: $serve
 for apps in $server_id; do
 cat $temp_json | jq -r '.servers[] | select(.id == "'$server_id'") | .apps[] | [.id, .sys_user, .label, .app_fqdn, .cname, .application] | @csv';
 done
-$temp_json >> abd.csv
 done
 echo "---------------------------------";
 rm $temp_json;
