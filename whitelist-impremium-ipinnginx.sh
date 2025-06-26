@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Step 1: Ask user to enter IPs to whitelist
+# Step 1:  enter IPs to whitelist
 echo "Enter IP addresses to whitelist (space-separated):"
 read -r -a whitelist_ips
 
