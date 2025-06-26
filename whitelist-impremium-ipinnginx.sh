@@ -67,12 +67,12 @@ for app in \$(ls); do
         curl -s https://api.wordpress.org/secret-key/1.1/salt > wp-salt.php
         sed -i '1s/^/<?php\\n/' wp-salt.php
 
- #      echo "[+] Moving suspicious plugins/themes (numeric)..."
- #      find wp-content/{themes,plugins} -maxdepth 1 -regextype posix-extended -regex '.*/[^/]*[0-9][^/]*' -exec mv {} ../private_html/ \;
- #
- #      echo "[+] Moving specific known plugins..."
- #      [[ -d wp-content/plugins/wp-file-manager ]] && mv wp-content/plugins/wp-file-manager ../private_html/
- #      [[ -d wp-content/plugins/PHP-Console_1.2-1 ]] && mv wp-content/plugins/PHP-Console_1.2-1 ../private_html/
+ #       echo "[+] Moving suspicious plugins/themes (numeric)..."
+#        find wp-content/{themes,plugins} -maxdepth 1 -regextype posix-extended -regex '.*/[^/]*[0-9][^/]*' -exec mv {} ../private_html/ \;
+#
+ #       echo "[+] Moving specific known plugins..."
+  #      [[ -d wp-content/plugins/wp-file-manager ]] && mv wp-content/plugins/wp-file-manager ../private_html/
+   #     [[ -d wp-content/plugins/PHP-Console_1.2-1 ]] && mv wp-content/plugins/PHP-Console_1.2-1 ../private_html/
 
         echo "[+] Resetting permissions..."
         chown "\$app":www-data -R *
