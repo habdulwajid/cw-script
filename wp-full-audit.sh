@@ -1,75 +1,98 @@
 #!/bin/bash
 
 # === Configuration ===
-ipfile="$1"  # File containing list of IPs
+ipfile="$1"  # IP list file passed as first argument
 user="systeam"
 port=22
-logfile="wp_audit_log_$(date +%F_%H-%M-%S).log"
+timestamp=$(date +%F_%H-%M-%S)
+logfile="malware_cleanup_$timestamp.log"
 
-# === Output Colors ===
+# === Colors for output ===
 _green="\e[32m"
 _red="\e[31m"
 _reset="\e[0m"
 
-# === Logger Functions ===
+# === Logger functions ===
 _note() {
-    echo -e "${_green}[+] $1${_reset}"
-    echo "[+] $1" >> "$logfile"
+    echo -e "${_green}[+] $1${_reset}" | tee -a "$logfile"
 }
 
 _error() {
-    echo -e "${_red}[-] $1${_reset}"
-    echo "[-] $1" >> "$logfile"
+    echo -e "${_red}[-] $1${_reset}" | tee -a "$logfile"
 }
 
-# === Input Validation ===
-if [[ ! -s $ipfile ]]; then
+# === Check if IP list file exists ===
+if [[ ! -s "$ipfile" ]]; then
     _error "IP file not found or empty: $ipfile"
     exit 1
 fi
 
-# === Start Processing ===
+# === Main Loop ===
 while read -r ip; do
     [[ -z "$ip" ]] && continue
     _note "Connecting to: $ip"
 
-    ssh -p $port -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$user@$ip" << 'EOF'
-echo "✅ Connected to $(hostname)"
+    ssh -p $port -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$user@$ip" 'bash -s' <<EOF | tee -a "$logfile" 2>&1
 
-# === WordPress Health ===
+sudo bash <<'INNER'
+echo "✅ Connected to \$(hostname)"
+echo "---- Starting Malware Cleaner ----"
+app_base="/home/master/applications"
 
-if command -v wp &> /dev/null && wp core is-installed --allow-root; then
-    echo -e "\n[WP Core Version]"
-    wp core version --allow-root
+cd "\$app_base" || exit 1
 
-    echo -e "\n [WP Checksum Validation]"
-    wp core verify-checksums --allow-root
+for app in \$(ls); do
+    echo "--------------------"
+    echo "Processing: \$app"
+    site_path="\$app_base/\$app/public_html"
 
-    echo -e "\n [Active Plugins]"
-    wp plugin list --status=active --format=table --allow-root
+    if [[ -d "\$site_path" ]]; then
+        cd "\$site_path" || continue
 
-    echo -e "\n  [Inactive Plugins with Updates]"
-    wp plugin list --status=inactive --update=available --allow-root
+        echo "[+] Downloading WP core..."
+        wp core download --force --version=\$(wp core version --allow-root) --allow-root || continue
 
-    echo -e "\n [Installed Themes]"
-    wp theme list --allow-root
+        echo "[+] Verifying core checksums..."
+        wp core verify-checksums --allow-root 2> stderr.txt
+        if [[ -s stderr.txt ]]; then
+            awk '{print \$6}' stderr.txt | while read -r file; do
+                echo "Would remove suspicious file: \$file"
+                # Uncomment to actually remove:
+                # rm -f "\$file"
+            done
+            rm -f stderr.txt
+        fi
 
-    echo -e "\n [Themes with Updates]"
-    wp theme list --update=available --allow-root
+        echo "[+] Refreshing salts..."
+        curl -s https://api.wordpress.org/secret-key/1.1/salt > wp-salt.php
+        sed -i '1s/^/<?php\\n/' wp-salt.php
 
-    echo -e "\n [Suspicious PHP Files in wp-content]"
-    find wp-content/ -type f -name "*.php" -exec grep -i "base64_decode" {} \; -print | head -n 5
+ #       echo "[+] Moving suspicious plugins/themes (numeric)..."
+#        find wp-content/{themes,plugins} -maxdepth 1 -regextype posix-extended -regex '.*/[^/]*[0-9][^/]*' -exec mv {} ../private_html/ \;
+#
+ #       echo "[+] Moving specific known plugins..."
+  #      [[ -d wp-content/plugins/wp-file-manager ]] && mv wp-content/plugins/wp-file-manager ../private_html/
+   #     [[ -d wp-content/plugins/PHP-Console_1.2-1 ]] && mv wp-content/plugins/PHP-Console_1.2-1 ../private_html/
 
-else
-    echo -e "\n⚠️ WP-CLI not installed or WordPress not found in /var/www/html"
-fi
+        echo "[+] Resetting permissions..."
+        chown "\$app":www-data -R *
 
-echo -e "\n✅ Completed execution on $(hostname)"
+        echo "[+] Plugin & Theme List:"
+        wp plugin list --allow-root
+        wp theme list --allow-root
+
+#        echo "[+] private_html contents:"
+#        ls -al ../private_html || echo "No private_html"
+    fi
+done
+
+echo "---- Completed Malware Cleaner ----"
+INNER
 EOF
 
     if [[ $? -ne 0 ]]; then
-        _error "Failed to connect or execute on: $ip"
+        _error "Failed to complete tasks on $ip"
     else
-        _note "Audit complete on: $ip"
+        _note "Finished all tasks on $ip"
     fi
 done < "$ipfile"
