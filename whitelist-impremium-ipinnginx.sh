@@ -1,117 +1,98 @@
 #!/bin/bash
 
-# 📌 CONFIGURABLE (via env vars or defaults)
-SSH_USER="${SSH_USER:-systeam}"
-SSH_PORT="${SSH_PORT:-22}"
-LOG_FILE="imperium-white-$(date +%F_%H-%M-%S).log"
+# === Configuration ===
+ipfile="$1"  # IP list file passed as first argument
+user="systeam"
+port=22
+timestamp=$(date +%F_%H-%M-%S)
+logfile="malware_cleanup_$timestamp.log"
 
-# Step 1: Ask user for IPs to whitelist
-echo "Enter IP addresses to whitelist (space-separated):"
-read -r -a whitelist_ips
+# === Colors for output ===
+_green="\e[32m"
+_red="\e[31m"
+_reset="\e[0m"
 
-# Step 2: Validate script argument (IP list file)
-if [[ -z "$1" ]]; then
-    echo "❌ Usage: $0 <server-ip-list-file>"
+# === Logger functions ===
+_note() {
+    echo -e "${_green}[+] $1${_reset}" | tee -a "$logfile"
+}
+
+_error() {
+    echo -e "${_red}[-] $1${_reset}" | tee -a "$logfile"
+}
+
+# === Check if IP list file exists ===
+if [[ ! -s "$ipfile" ]]; then
+    _error "IP file not found or empty: $ipfile"
     exit 1
 fi
 
-ipfile="$1"
-if [[ ! -f "$ipfile" ]]; then
-    echo "❌ File not found: $ipfile"
-    exit 1
-fi
+# === Main Loop ===
+while read -r ip; do
+    [[ -z "$ip" ]] && continue
+    _note "Connecting to: $ip"
 
-# Step 3: Read server IPs into array
-serverips=()
-while IFS= read -r line; do
-    [[ -n "$line" ]] && serverips+=("$(echo "$line" | awk '{print $1}')")
-done < "$ipfile"
+    ssh -p $port -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$user@$ip" 'bash -s' <<EOF | tee -a "$logfile" 2>&1
 
-arraysize=${#serverips[@]}
-if [[ $arraysize -eq 0 ]]; then
-    echo "❌ No valid server IPs found in file."
-    exit 1
-fi
+sudo bash <<'INNER'
+echo "✅ Connected to \$(hostname)"
+echo "---- Starting Malware Cleaner ----"
+app_base="/home/master/applications"
 
-# Step 4: Loop over each server
-for (( i=0; i< arraysize; ++i )); do
-    server="${serverips[$i]}"
-    echo "===========================================================" | tee -a "$LOG_FILE"
-    echo "Whitelisting on server: $server" | tee -a "$LOG_FILE"
-    echo -e "\e[33m------------------------------------\e[0m" | tee -a "$LOG_FILE"
+cd "\$app_base" || exit 1
 
-    # Test SSH connection
-    if ! ssh -p"$SSH_PORT" -o ConnectTimeout=5 -q "$SSH_USER@$server" "exit"; then
-        echo "❌ SSH connection failed to $server" | tee -a "$LOG_FILE"
-        continue
-    fi
+for app in \$(ls); do
+    echo "--------------------"
+    echo "Processing: \$app"
+    site_path="\$app_base/\$app/public_html"
 
-    # Remote: backup config and prepare temp block file
-    ssh -p"$SSH_PORT" -q "$SSH_USER@$server" "sudo -i bash -s" <<EOF
-CONFIG_FILE="/etc/nginx/conf.d/ip_blocakge.conf"
-BACKUP_FILE="\$CONFIG_FILE.bak_\$(date +%F_%T)"
-cp "\$CONFIG_FILE" "\$BACKUP_FILE"
-> /tmp/ip_whitelist_block.txt
-EOF
+    if [[ -d "\$site_path" ]]; then
+        cd "\$site_path" || continue
 
-    # Send whitelist IPs to remote
-    for ip in "${whitelist_ips[@]}"; do
-        if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "⚠️ Skipping invalid IP: $ip" | tee -a "$LOG_FILE"
-            continue
+        echo "[+] Downloading WP core..."
+        wp core download --force --version=\$(wp core version --allow-root) --allow-root || continue
+
+        echo "[+] Verifying core checksums..."
+        wp core verify-checksums --allow-root 2> stderr.txt
+        if [[ -s stderr.txt ]]; then
+            awk '{print \$6}' stderr.txt | while read -r file; do
+                echo "Would remove suspicious file: \$file"
+                # Uncomment to actually remove:
+                # rm -f "\$file"
+            done
+            rm -f stderr.txt
         fi
-        ssh -p"$SSH_PORT" -q "$SSH_USER@$server" \
-        "echo '    $ip 1;   # BulkWhitelist' | sudo tee -a /tmp/ip_whitelist_block.txt > /dev/null"
-    done
 
-    # Final comment
-    ssh -p"$SSH_PORT" -q "$SSH_USER@$server" \
-    "echo '    # BulkWhitelist' | sudo tee -a /tmp/ip_whitelist_block.txt > /dev/null"
+        echo "[+] Refreshing salts..."
+        curl -s https://api.wordpress.org/secret-key/1.1/salt > wp-salt.php
+        sed -i '1s/^/<?php\\n/' wp-salt.php
 
-    # Remote: inject into config with validation and rollback
-    ssh -p"$SSH_PORT" -q "$SSH_USER@$server" "sudo -i bash -s" <<'EOF'
-CONFIG_FILE="/etc/nginx/conf.d/ip_blocakge.conf"
-TMP_BLOCK="/tmp/ip_whitelist_block.txt"
-TMP_CONF="/tmp/ip_blocakge.conf.tmp"
-BACKUP_FILE="\${CONFIG_FILE}.bak_\$(date +%F_%T)"
+ #      echo "[+] Moving suspicious plugins/themes (numeric)..."
+ #      find wp-content/{themes,plugins} -maxdepth 1 -regextype posix-extended -regex '.*/[^/]*[0-9][^/]*' -exec mv {} ../private_html/ \;
+ #
+ #      echo "[+] Moving specific known plugins..."
+ #      [[ -d wp-content/plugins/wp-file-manager ]] && mv wp-content/plugins/wp-file-manager ../private_html/
+ #      [[ -d wp-content/plugins/PHP-Console_1.2-1 ]] && mv wp-content/plugins/PHP-Console_1.2-1 ../private_html/
 
-# Validate input file
-if [[ ! -s "$TMP_BLOCK" ]]; then
-    echo "❌ Temp block file missing or empty. Skipping."
-    exit 1
-fi
+        echo "[+] Resetting permissions..."
+        chown "\$app":www-data -R *
 
-# Ensure marker exists
-if ! grep -q '#add IPs here' "$CONFIG_FILE"; then
-    echo "❌ Marker '#add IPs here' not found in $CONFIG_FILE. Aborting."
-    exit 1
-fi
+        echo "[+] Plugin & Theme List:"
+        wp plugin list --allow-root
+        wp theme list --allow-root
 
-# Insert block under marker
-awk -v blk="$TMP_BLOCK" '
-/#add IPs here/ {
-    print
-    while ((getline line < blk) > 0) print line
-    next
-} 1' "$CONFIG_FILE" > "$TMP_CONF"
+#        echo "[+] private_html contents:"
+#        ls -al ../private_html || echo "No private_html"
+    fi
+done
 
-# Backup again and replace
-cp "$CONFIG_FILE" "$BACKUP_FILE"
-mv "$TMP_CONF" "$CONFIG_FILE"
-
-# Validate and reload NGINX
-if nginx -t; then
-    systemctl restart nginx
-    echo "✅ NGINX reloaded successfully."
-else
-    echo "❌ NGINX config error. Rolling back."
-    cp "$BACKUP_FILE" "$CONFIG_FILE"
-    nginx -t && systemctl restart nginx
-fi
-
-rm -f "$TMP_BLOCK"
+echo "---- Completed Malware Cleaner ----"
+INNER
 EOF
 
-    echo "✅ Whitelisting complete on $server" | tee -a "$LOG_FILE"
-    echo "===========================================================" | tee -a "$LOG_FILE"
-done
+    if [[ $? -ne 0 ]]; then
+        _error "Failed to complete tasks on $ip"
+    else
+        _note "Finished all tasks on $ip"
+    fi
+done < "$ipfile"
