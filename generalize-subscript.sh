@@ -1,10 +1,17 @@
 # Checking pipeline migration process
-if ps aux | grep -q "[w]ordpress"; then
-  echo "WordPress migration process is running:"
-  ps aux | grep "[w]ordpress"
+if ps aux | grep -q "[w]ordpress_importer_daemon"; then
+  echo "✅ WordPress migration process is running."
+  cd /home/master/applications/neyqdfhyte/public_html/import-logs || exit
+  if [[ -f completed-sites.json ]]; then
+    completed=$(jq 'keys | length' completed-sites.json 2>/dev/null)
+    echo "📊 Result: $completed apps completed."
+  else
+    echo "⚠️ completed-sites.json file not found in import-logs directory."
+  fi
 else
-  echo "WordPress migration process is not running."
+  echo "⚠️ WordPress migration process is not running. Skipping..."
 fi
+
 
 #-------------------------------------------
 
