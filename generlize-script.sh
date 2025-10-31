@@ -92,7 +92,13 @@ while read -r entry; do
   echo "Server Label     : $label"    "Server IP Address: $ip"
   echo "------------------------------------------------------------------"
 
-  ssh -p22 -o StrictHostKeyChecking=no "$ssh_user@$ip" "sudo bash -s" < "$tmpfile"
+  #ssh -p22 -o StrictHostKeyChecking=no "$ssh_user@$ip" "sudo bash -s" < "$tmpfile"
+  timeout 15s ssh -p22 \
+  -o StrictHostKeyChecking=no \
+  -o ConnectTimeout=8 \
+  -o BatchMode=yes \
+  -o ConnectionAttempts=1 \
+  "$ssh_user@$ip" "sudo bash -s" < "$tmpfile"
   if [[ $? -eq 0 ]]; then
     _success "Commands executed successfully on $label ($ip)"
   else
