@@ -62,7 +62,7 @@ if [[ ("\$CPU_USAGE_INT" -ge 95 || "\$RAM_USAGE_INT" -ge 90) && "\$BACKUP_RUNNIN
 fi
 
 if [[ -f "\$FLAG_FILE" && "\$RAM_USAGE_INT" -le 90 && "\$CPU_USAGE_INT" -le 85 ]]; then
-  object_right='{"attachments": [{"color": "#2eb886", "title": "SERVER HEALTHY","text": "'"date: \$DATE UTC\n"' '"customer: $CUSTOMER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "thumbsup"}]'
+  object_right='{"attachments": [{"color": "#2eb886", "title": "SERVER HEALTHY","text": "'"date: \$DATE UTC\n"' '"customer: $CUSTOMER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "thumbsup"}'
   rm "\$FLAG_FILE"
   curl -s -X POST -H 'Content-type: application/json' --data "\$object_right" \${SLACK_WEBHOOK_URL}
 fi
