@@ -4,6 +4,8 @@
 # Node Exporter, Promtail & Shorewall Config Installer
 # ===============================
 
+cd /var/cw/systeam
+
 # ---- User Inputs ----
 read -p "Enter server name (e.g., harvestmoonca): " SERVER_NAME
 read -p "Enter server IP/instance (e.g., 34.152.21.195): " INSTANCE
