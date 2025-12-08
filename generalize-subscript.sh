@@ -103,3 +103,32 @@ echo ""
 done
 
 echo "Done scanning."
+
+
+
+# Whitelist Countires from imunify
+#!/bin/bash
+
+# List of country codes to remove from blacklist
+COUNTRIES=(
+CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR
+GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE
+)
+
+for COUNTRY in "${COUNTRIES[@]}"; do
+    echo "Removing $COUNTRY from blacklist..."
+
+    # Run the delete command
+    imunify360-agent blacklist country delete "$COUNTRY"
+
+    # Check the exit status
+    if [ $? -eq 0 ]; then
+        echo "$COUNTRY successfully removed from blacklist."
+    else
+        echo "Failed to remove $COUNTRY. Skipping..."
+    fi
+done
+
+echo "Blacklist removal completed for all countries."
+
+
