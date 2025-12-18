@@ -132,3 +132,35 @@ done
 echo "Blacklist removal completed for all countries."
 
 
+# Removing selected bots from Nginx 
+
+#!/bin/bash
+
+FILE="/etc/nginx/additional_server_conf"
+BOTS="Slurp|AppleNewsBot|Pinterestbot|DuckAssistBot|OAI-SearchBot"
+
+echo "Checking for target bots in $FILE ..."
+
+if grep -Eq "$BOTS" "$FILE"; then
+    echo "Bots found. Updating Nginx config..."
+
+    sudo sed -i -E "s/\\|($BOTS)//g" "$FILE"
+
+    echo "Testing Nginx configuration..."
+    if sudo nginx -t; then
+        echo "Nginx config OK. Reloading..."
+        sudo systemctl reload nginx
+
+        echo "Nginx status:"
+        sudo systemctl --no-pager status nginx
+    else
+        echo "❌ Nginx config test failed. Changes NOT applied."
+        exit 1
+    fi
+else
+    echo "No matching bots found. Skipping changes."
+fi
+
+echo "Done. You can proceed to the next server."
+
+
