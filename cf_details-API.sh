@@ -68,6 +68,16 @@ cat $temp_json | jq -r '.servers[] | [.id, .public_ip, .label, .cloud, .region, 
         echo "      minify_js=$minify_js minify_css=$minify_css minify_html=$minify_html"
         echo "      scrapeshield=$scrapeshield caching=$caching edgecaching=$edgecaching ua_mode=$ua_mode"
 
+
+
+        # --- New API: Smart Cache Purge (FPC) status ---
+    fpc_status=$(curl -s -X GET -H "Authorization: Bearer $get_token" \
+            "https://api.cloudways.com/api/v1/app/cloudflareCdn/checkFPCStatus?server_id=$server_id&app_id=$app_id")
+            # Extract deployed status
+            fpc_deployed=$(echo $fpc_status | jq -r '.data.deployed')        
+            echo "Smart Cache Purge (FPC) Deployed: $fpc_deployed"
+
+
           # --- New endpoint: Cloudflare DNS status ---
     cloudflare_dns=$(curl -s -X GET -H "Authorization: Bearer $get_token" \
         "https://api.cloudways.com/api/v1/app/cloudflareCdn?server_id=$server_id&app_id=$app_id")
