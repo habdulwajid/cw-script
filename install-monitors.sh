@@ -9,7 +9,7 @@ CRON_DIR="/etc/cron.d"
 
 echo "===== Monitoring Installer ====="
 read -rp "Enter Slack Webhook URL: " SLACK_WEBHOOK_URL
-read -rp "Enter Customer Name: " CUSTOMER_NAME
+read -rp "Enter server Name: " server_NAME
 read -rp "Enter Server Public IP (leave blank to auto-detect): " SERVER_IP
 
 if [ -z "$SERVER_IP" ]; then
@@ -28,7 +28,7 @@ cat > "$MONITOR_DIR/cpu-memory-monitor.sh" <<EOF
 DATE=\$(date "+%Y-%m-%d %H:%M:")
 LOGFILE=/var/log/cpu-memory-monitoring.log
 SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
-CUSTOMER_NAME="$CUSTOMER_NAME"
+SERVER_NAME="$SERVER_NAME"
 SERVER_IP="$SERVER_IP"
 
 CPU_USAGE_FLOAT=\$(sar -P ALL 30 4 | grep 'Average:        all' | awk -F" " '{print 100.0 -\$NF}')
@@ -54,7 +54,7 @@ if [[ ("\$CPU_USAGE_INT" -ge 95 || "\$RAM_USAGE_INT" -ge 90) && "\$BACKUP_RUNNIN
 fi
 
 if [[ ("\$CPU_USAGE_INT" -ge 95 || "\$RAM_USAGE_INT" -ge 90) && "\$BACKUP_RUNNING" == "no" ]]; then
-  object_wrong='{"attachments": [{"color": "#fc0600", "title": "SERVER RESOURCE ALERT","text": "'"date: \$DATE UTC\n"' '"customer: $CUSTOMER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "warning"}'
+  object_wrong='{"attachments": [{"color": "#fc0600", "title": "SERVER RESOURCE ALERT","text": "'"date: \$DATE UTC\n"' '"SERVER: $SERVER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "warning"}'
   touch "\$FLAG_FILE"
   curl -s -X POST -H 'Content-type: application/json' --data "\$object_wrong" \${SLACK_WEBHOOK_URL}
   rm ram_used
@@ -62,7 +62,7 @@ if [[ ("\$CPU_USAGE_INT" -ge 95 || "\$RAM_USAGE_INT" -ge 90) && "\$BACKUP_RUNNIN
 fi
 
 if [[ -f "\$FLAG_FILE" && "\$RAM_USAGE_INT" -le 90 && "\$CPU_USAGE_INT" -le 85 ]]; then
-  object_right='{"attachments": [{"color": "#2eb886", "title": "SERVER HEALTHY","text": "'"date: \$DATE UTC\n"' '"customer: $CUSTOMER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "thumbsup"}'
+  object_right='{"attachments": [{"color": "#2eb886", "title": "SERVER HEALTHY","text": "'"date: \$DATE UTC\n"' '"SERVER: $SERVER_NAME\n"' '"server_ip: \$SERVER_IP\n"' '"cpu_used: \$CPU_USAGE_INT %\n"' '"ram_used: \$RAM_USAGE_INT %\n"'"}], "icon_emoji": "thumbsup"}'
   rm "\$FLAG_FILE"
   curl -s -X POST -H 'Content-type: application/json' --data "\$object_right" \${SLACK_WEBHOOK_URL}
 fi
@@ -83,7 +83,7 @@ EOF
 cat > "$BASE_DIR/disk-monitor.sh" <<EOF
 #!/bin/bash
 SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
-CUSTOMER_NAME="$CUSTOMER_NAME"
+SERVER_NAME="$SERVER_NAME"
 SERVER_NAME_FILE="/tmp/server_name.txt"
 THRESHOLD=95
 DATE=\$(date "+%Y-%m-%d %H:%M:%S")
@@ -99,7 +99,7 @@ df -H | grep "/dev" | grep -v boot | grep -vE '^Filesystem|udev|tmpfs|cdrom' | a
   usage=\$(echo \$output | awk '{ print \$1}' | sed 's/%//g')
   partition=\$(echo \$output | awk '{ print \$2 " mounted on " \$3}')
   if [ "\$usage" -ge "\$THRESHOLD" ]; then
-    message=":Warning: *Disk Usage Alert* \n *Date:* \$DATE \n *Customer:* $CUSTOMER_NAME \n *Server IP:* \$SERVER_IP \n *Partition:* \$partition \n *Usage:* \$usage%"
+    message=":Warning: *Disk Usage Alert* \n *Date:* \$DATE \n *SERVER:* $SERVER_NAME \n *Server IP:* \$SERVER_IP \n *Partition:* \$partition \n *Usage:* \$usage%"
     curl -s -X POST -H 'Content-type: application/json' --data "{\\"text\\": \\"\$message\\"}" \$SLACK_WEBHOOK_URL
   fi
 done
@@ -119,7 +119,7 @@ cat > "$MONITOR_DIR/oom-monitor.sh" <<EOF
 LOGFILE="/var/log/syslog"
 OOM_LOGFILE="/var/log/oom_monitor.log"
 PATTERN="oom-killer"
-CUSTOMER_NAME="$CUSTOMER_NAME"
+SERVER_NAME="$SERVER_NAME"
 SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
 ALERT_FILE="/tmp/oom_alert_sent"
 PID_FILE="/tmp/oom_monitor.pid"
@@ -149,7 +149,7 @@ trap "rm -f \$PID_FILE" EXIT
 journalctl -kf | while read -r line; do
     if echo "\$line" | grep -i "\$PATTERN" > /dev/null; then
         PROC_NAME=\$(echo "\$line" | grep -oP '(?<=process ).*?(?=score)')
-        curl -s -X POST -H 'Content-type: application/json' --data "{\\"text\\": \\":warning: OOM Killer Alert! $CUSTOMER_NAME:\$SERVER_IP: \$line\\"}" "\$SLACK_WEBHOOK_URL"
+        curl -s -X POST -H 'Content-type: application/json' --data "{\\"text\\": \\":warning: OOM Killer Alert! $SERVER_NAME:\$SERVER_IP: \$line\\"}" "\$SLACK_WEBHOOK_URL"
         echo "== Top 5 CPU ==" >> \${OOM_LOGFILE}
         ps aux --sort=-%cpu | head -n 6 >> \${OOM_LOGFILE}
         echo "== Top 5 Memory ==" >> \${OOM_LOGFILE}
@@ -181,7 +181,7 @@ cat > "$MONITOR_DIR/phpfpm-monitor.sh" <<EOF
 LOCKFILE="/tmp/phpfpm-monitor.lock"
 LOG_OUTPUT="/var/log/phpfpm-monitor.log"
 SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL"
-CUSTOMER_NAME="$CUSTOMER_NAME"
+SERVER_NAME="$SERVER_NAME"
 RESTART_COOLDOWN=120
 COOLDOWN_FILE="/tmp/phpfpm-restart-lasttime"
 SERVER_IP="$SERVER_IP"
@@ -217,9 +217,9 @@ restart_php_fpm() {
     local log_line="\$1"
     systemctl restart "\$FPM_SERVICE.service"
     if [ \$? -eq 0 ]; then
-        send_slack_alert ":warning: PHP-FPM issue detected on $CUSTOMER_NAME (\$SERVER_IP). Service restarted: \${FPM_SERVICE}. Error line: \${log_line}"
+        send_slack_alert ":warning: PHP-FPM issue detected on $SERVER_NAME (\$SERVER_IP). Service restarted: \${FPM_SERVICE}. Error line: \${log_line}"
     else
-        send_slack_alert ":x: PHP-FPM restart failed on $CUSTOMER_NAME (\$SERVER_IP). Service: \${FPM_SERVICE}"
+        send_slack_alert ":x: PHP-FPM restart failed on $SERVER_NAME (\$SERVER_IP). Service: \${FPM_SERVICE}"
     fi
 }
 
