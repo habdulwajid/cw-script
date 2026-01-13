@@ -164,3 +164,43 @@ fi
 echo "Done. You can proceed to the next server."
 
 
+# Fetch COuntry black list form imuinify
+#!/bin/bash
+
+# File to store blocked countries
+BLOCKED_FILE="blocked_countries.txt"
+
+# Clean the file if it exists
+> "$BLOCKED_FILE"
+
+# Pagination variables
+offset=0
+limit=25
+
+echo "Fetching all blocked countries..."
+
+# Fetch all blocked countries
+while true; do
+    countries=$(imunify360-agent blacklist country list --limit $limit --offset $offset | grep -v "COMMENT  COUNTRY" | awk '{print $2}')
+    if [[ -z "$countries" ]]; then
+        break
+    fi
+    echo "$countries" >> "$BLOCKED_FILE"
+    offset=$((offset + limit))
+done
+
+echo "All blocked countries saved in $BLOCKED_FILE"
+echo "Countries to unblock:"
+
+cat "$BLOCKED_FILE"
+
+# Loop through the file and delete each country from blacklist
+while read -r country; do
+    if [[ -n "$country" ]]; then
+        echo "Deleting $country from blacklist..."
+        imunify360-agent blacklist country delete "$country"
+    fi
+done < "$BLOCKED_FILE"
+
+echo "All countries removed from blacklist."
+
