@@ -15,7 +15,7 @@ fi
 
 #-------------------------------------------
 
-# Bandwidth calculation. 
+# CW Bandwidth calculation. 
 for A in $(ls /etc/nginx/sites-available/ | awk '!/^default/ {print $1}'); do
     echo "" > total.txt
     echo "------------------------------------------------------------"
@@ -37,6 +37,59 @@ for A in $(ls /etc/nginx/sites-available/ | awk '!/^default/ {print $1}'); do
 
     awk '{total +=$1} END {printf ("%s %.3f %s\n", "Total:", total/1024/1024/1024, "GB")}' total.txt
 done
+
+
+# Updated version of Bandwidth calculation
+#!/bin/bash
+# ===============================
+# Bandwidth Calculation Subscript
+# ===============================
+
+SITES_DIR="/etc/nginx/sites-available"
+LOG_FILE=${1:-"/tmp/bw_log_$(date +%F_%H-%M-%S).log"}
+
+# Get list of app roots from nginx configs
+mapfile -t apps < <(grep -hR "root " "$SITES_DIR" | awk '{print $2}' | sed 's/;//' | sort -u)
+
+total_apps=${#apps[@]}
+success_count=0
+
+echo "Found $total_apps apps (from nginx configs)." | tee -a "$LOG_FILE"
+
+idx=0
+for app_root in "${apps[@]}"; do
+    ((idx++))
+    app_name=$(basename "$app_root")
+    echo "-----------------------------------------------------" | tee -a "$LOG_FILE"
+    echo "App #$idx : $app_name" | tee -a "$LOG_FILE"
+
+    # Skip if directory does not exist
+    if [[ ! -d "$app_root" ]]; then
+        echo "⚠ App directory $app_root does not exist, skipping..." | tee -a "$LOG_FILE"
+        continue
+    fi
+
+    app_total_file="/tmp/total_${app_name}.txt"
+    > "$app_total_file"
+
+    for i in {30..0}; do
+        day=$(date --date="$i days ago" '+%d/%b/%Y')
+        daily_sum=$(zcat -f "$app_root/logs/"*"_*.access.log"* 2>/dev/null | \
+                    awk -v day="$day" '$4 ~ day {sum += $10} END {print sum}')
+        daily_sum=${daily_sum:-0}
+        echo "$day: $(awk "BEGIN {printf \"%.3f MB\", $daily_sum/1024/1024}")" | tee -a "$LOG_FILE"
+        echo "$daily_sum" >> "$app_total_file"
+    done
+
+    app_total=$(awk '{sum+=$1} END {printf "%.3f", sum/1024/1024/1024}' "$app_total_file")
+    echo "App Total Bandwidth: $app_total GB" | tee -a "$LOG_FILE"
+
+    ((success_count++))
+done
+
+echo "-----------------------------------------------------" | tee -a "$LOG_FILE"
+echo "Script executed successfully on $success_count/$total_apps apps." | tee -a "$LOG_FILE"
+
 
 
 # Plugin deactivation
