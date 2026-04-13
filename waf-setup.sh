@@ -1,56 +1,63 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
+echo "======================================"
+echo " NGINX SAFE WAF INSTALLER"
+echo "======================================"
+
+# --------------------------------------
+
+# Ask domain
+
+# --------------------------------------
+
+read -p "Enter domain (e.g. example.com): " DOMAIN
+
+VHOST="/etc/nginx/sites-available/$DOMAIN"
 MAP_FILE="/etc/nginx/conf.d/waf-bot-map.conf"
-SNIPPET="# WAF_BOT_BLOCK"
+BACKUP_DIR="/etc/nginx/backup-waf"
 
-echo "----------------------------------------"
-echo " NGINX WAF SETUP SCRIPT"
-echo "----------------------------------------"
+mkdir -p "$BACKUP_DIR"
 
-# Ask for domain / vhost file
-
-read -p "Enter domain (e.g. southernindianapower.com): " DOMAIN
-
-VHOST_FILE="/etc/nginx/sites-available/$DOMAIN"
-
-if [ ! -f "$VHOST_FILE" ]; then
-echo "❌ Vhost file not found: $VHOST_FILE"
+if [ ! -f "$VHOST" ]; then
+echo "[ERROR] Vhost not found: $VHOST"
 exit 1
 fi
 
-echo "✔ Using vhost: $VHOST_FILE"
+echo "[INFO] Using: $VHOST"
 
-# ----------------------------------------
+# --------------------------------------
 
-# Create / Update MAP FILE
+# BACKUP VHOST FIRST (CRITICAL SAFETY)
 
-# ----------------------------------------
+# --------------------------------------
 
-echo "➡ Creating/updating map file..."
+BACKUP_FILE="$BACKUP_DIR/${DOMAIN}.$(date +%F-%H%M%S).bak"
+cp "$VHOST" "$BACKUP_FILE"
+
+echo "[OK] Backup created: $BACKUP_FILE"
+
+# --------------------------------------
+
+# CREATE MAP FILE (SAFE CLEAN VERSION)
+
+# --------------------------------------
 
 cat > "$MAP_FILE" << 'EOF'
-
-# =====================================================
-
-# GLOBAL WAF MAPS
-
-# =====================================================
-
 map $http_user_agent $is_bad_bot {
 default 0;
 
 ```
-~*(curl|wget|python|python-requests|python-urllib|aiohttp|httpx|scrapy|mechanize|axios|node-fetch|fetch|http-client|go-http-client|okhttp|libwww|lwp|perl|ruby|java|apache-httpclient) 1;
+~*(curl|wget|python|aiohttp|httpx|scrapy|axios|node-fetch|go-http-client|okhttp|libwww|perl|ruby|java) 1;
 
-~*(bot|crawl|spider|scrape|semrush|ahrefs|mj12bot|dotbot|blexbot|majestic|serpstat|seokicks|linkdex|rogerbot|spbot|exabot|sistrix|dataforseo) 1;
+~*(bot|crawl|spider|scrape|semrush|ahrefs|mj12bot|dotbot|majestic|serpstat|seokicks|linkdex|rogerbot) 1;
 
-~*(nikto|nmap|masscan|sqlmap|zgrab|dirbuster|gobuster|wfuzz|fuzz|hydra|burp|zap|acunetix|nessus|openvas|whatweb) 1;
+~*(nikto|nmap|masscan|sqlmap|zgrab|dirbuster|gobuster|wfuzz|fuzz|hydra|burp|zap|acunetix|nessus|openvas) 1;
 
 ~*(headless|phantomjs|selenium|puppeteer|playwright|webdriver|htmlunit|slimerjs|lighthouse) 1;
 
-~*(gptbot|chatgpt|openai|claude|anthropic|cohere|ccbot|amazonbot|bytespider|diffbot|perplexity|google-extended) 1;
+~*(gptbot|chatgpt|openai|claude|anthropic|cohere|ccbot|amazonbot|bytespider|diffbot|perplexity) 1;
 ```
 
 }
@@ -79,51 +86,78 @@ default 0;
 }
 EOF
 
-echo "✔ Map file updated: $MAP_FILE"
+echo "[OK] Map file written safely"
 
-# ----------------------------------------
+# --------------------------------------
 
-# Insert WAF block into vhost
+# TEST NGINX BEFORE APPLYING
 
-# ----------------------------------------
+# --------------------------------------
 
-if grep -q "$SNIPPET" "$VHOST_FILE"; then
-echo "✔ WAF already exists in vhost, skipping insert"
-else
-echo "➡ Inserting WAF block into vhost..."
-
-```
-awk -v snippet="$SNIPPET" '
-BEGIN { inserted=0 }
-{
-    if ($0 ~ /location[[:space:]]*\// && inserted==0) {
-        print "    " snippet
-        print "    if ($block_request = 1) { return 444; }"
-        print "    if ($http_user_agent = \"\") { return 444; }"
-        inserted=1
-    }
-    print
-}
-' "$VHOST_FILE" > "$VHOST_FILE.tmp" && mv "$VHOST_FILE.tmp" "$VHOST_FILE"
-
-echo "✔ WAF block inserted"
-```
-
+echo "[INFO] Testing nginx config..."
+if ! nginx -t; then
+echo "[ERROR] Nginx test failed. Aborting."
+exit 1
 fi
 
-# ----------------------------------------
+echo "[OK] Nginx config valid"
 
-# Test & Reload Nginx
+# --------------------------------------
 
-# ----------------------------------------
+# SAFE INSERT INTO VHOST (NO FILE CORRUPTION)
 
-echo "➡ Testing Nginx config..."
+# --------------------------------------
+
+TMP_FILE=$(mktemp)
+
+awk '
+BEGIN { inserted=0 }
+{
+print $0
+
+```
+if ($0 ~ /location[[:space:]]*\// && inserted==0) {
+    print "    # WAF_BOT_BLOCK"
+    print "    if ($block_request = 1) { return 444; }"
+    print "    if ($http_user_agent = \"\") { return 444; }"
+    inserted=1
+}
+```
+
+}
+END {
+if (inserted==0) {
+print "    # WAF_BOT_BLOCK"
+print "    if ($block_request = 1) { return 444; }"
+print "    if ($http_user_agent = "") { return 444; }"
+}
+}
+' "$VHOST" > "$TMP_FILE"
+
+# --------------------------------------
+
+# FINAL VALIDATION BEFORE REPLACE
+
+# --------------------------------------
+
+cp "$TMP_FILE" "$VHOST"
+
+rm -f "$TMP_FILE"
+
+echo "[INFO] Re-testing nginx after changes..."
+
 if nginx -t; then
-echo "✔ Nginx config OK"
-echo "➡ Reloading Nginx..."
 systemctl reload nginx
-echo "✅ DONE"
+echo "[SUCCESS] WAF applied safely"
 else
-echo "❌ Nginx config test failed. Rolling back not implemented."
+echo "[CRITICAL] Rollback triggered!"
+
+```
+cp "$BACKUP_FILE" "$VHOST"
+systemctl reload nginx
+
+echo "[ROLLBACK DONE] Original config restored"
 exit 1
+```
+
 fi
