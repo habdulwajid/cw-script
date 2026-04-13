@@ -34,7 +34,7 @@ map $http_user_agent $is_bad_bot {
     default 0;
 
     ~*(curl|wget|python|aiohttp|httpx|scrapy|axios|node-fetch|go-http-client|okhttp|libwww|perl|ruby|java) 1;
-    ~*(bot|crawl|spider|scrape|semrush|ahrefs|mj12bot|dotbot|majestic|serpstat|seokicks) 1;
+    ~*(bot|crawl|spider|scrape|semrush|SemrushBot||ahrefs|mj12bot|dotbot|majestic|serpstat|seokicks) 1;
     ~*(nikto|nmap|masscan|sqlmap|gobuster|wfuzz|burp|zap|acunetix|nessus|openvas) 1;
     ~*(headless|selenium|puppeteer|playwright|webdriver|lighthouse) 1;
     ~*(gptbot|chatgpt|openai|claude|anthropic|perplexity|bytespider|diffbot) 1;
@@ -118,6 +118,7 @@ for VHOST_NAME in $VHOSTS; do
         print $0
 
         if ($0 ~ /location[[:space:]]/ && inserted==0) {
+            print " if ($http_user_agent ~* "UptimeRobot|Pingdom|StatusCake")  { return 200; } "
             print "    # WAF_BOT_BLOCK"
             print "    if ($block_request = 1) { return 444; }"
             print "    if ($http_user_agent = \"\") { return 444; }"
@@ -127,6 +128,7 @@ for VHOST_NAME in $VHOSTS; do
 
     END {
         if (inserted==0) {
+            print " if ($http_user_agent ~* "UptimeRobot|Pingdom|StatusCake")  { return 200; } "
             print "    # WAF_BOT_BLOCK"
             print "    if ($block_request = 1) { return 444; }"
             print "    if ($http_user_agent = \"\") { return 444; }"
