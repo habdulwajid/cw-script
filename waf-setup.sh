@@ -118,7 +118,7 @@ for VHOST_NAME in $VHOSTS; do
         print $0
 
         if ($0 ~ /location[[:space:]]/ && inserted==0) {
-            print " if ($http_user_agent ~* "UptimeRobot|Pingdom|StatusCake")  { return 200; } "
+            print "    if ($http_user_agent ~* \"UptimeRobot|Pingdom|StatusCake\") { return 200; } "
             print "    # WAF_BOT_BLOCK"
             print "    if ($block_request = 1) { return 444; }"
             print "    if ($http_user_agent = \"\") { return 444; }"
@@ -128,7 +128,7 @@ for VHOST_NAME in $VHOSTS; do
 
     END {
         if (inserted==0) {
-            print " if ($http_user_agent ~* "UptimeRobot|Pingdom|StatusCake")  { return 200; } "
+            print "    if ($http_user_agent ~* \"UptimeRobot|Pingdom|StatusCake\") { return 200; } "
             print "    # WAF_BOT_BLOCK"
             print "    if ($block_request = 1) { return 444; }"
             print "    if ($http_user_agent = \"\") { return 444; }"
