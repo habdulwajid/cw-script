@@ -9,3 +9,7 @@ bash <(curl -s https://raw.githubusercontent.com/habdulwajid/cw-script/main/gene
 
 # WordPress Audit script
 curl -H 'Cache-Control: no-cache' -s https://raw.githubusercontent.com/sushantchawla2005/public_scripts/refs/heads/main/wordpress-audit.sh | bash
+
+
+# node updater
+curl -fsSL https://raw.githubusercontent.com/habdulwajid/cw-script/main/node-update.sh | bash
