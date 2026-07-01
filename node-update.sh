@@ -49,13 +49,8 @@ echo "----------------------------------------------"
 lsof /usr/bin/node || true
 
 echo
-read -rp "Do you want to continue? (y/N): " CONFIRM
-
-[[ "$CONFIRM" =~ ^[Yy]$ ]] || {
-    echo
-    echo "Operation cancelled."
-    exit 0
-}
+echo "Starting Node.js update..."
+echo
 
 mkdir -p "${DOWNLOAD_DIR}"
 mkdir -p "${BACKUP_DIR}"
